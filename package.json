@@ -9,7 +9,11 @@
   },
   "type": "module",
   "dependencies": {
-    "elysia": "^1.0.27",
+    "https": "^1.0.0",
+    "libgen": "^2.2.0",
+    "telegraf": "^4.16.3",
+    "telegraf-pagination": "^1.4.1",
+    "tesseract.js": "^5.1.0",
     "tsx": "^4.16.2"
   },
   "scripts": {
