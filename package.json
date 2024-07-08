@@ -1,5 +1,5 @@
 {
-  "name": "whatsapp_img2epub",
+  "name": "telegram_img2epub",
   "module": "index.ts",
   "devDependencies": {
     "@types/bun": "latest"
