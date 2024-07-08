@@ -1,0 +1,18 @@
+{
+  "name": "whatsapp_img2epub",
+  "module": "index.ts",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "type": "module",
+  "dependencies": {
+    "elysia": "^1.0.27",
+    "tsx": "^4.16.2"
+  },
+  "scripts": {
+    "start": "bun index.ts"
+  }
+}
