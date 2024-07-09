@@ -71,6 +71,7 @@ if (process.env.TOKEN === "") {
 }
 
 const libgenUrl = "http://libgen.is";
+const libgenCoverImageUrl = `${libgenUrl}/covers`
 const count = 10;
 const defaultExtension = "epub";
 
@@ -138,6 +139,75 @@ export const searchScene = new WizardScene<any>(
 );
 
 // This will be @botname /command. How do I do this? .command is only for /command...
+function getSearchType(query) {
+  const types = {
+    '/GeneralSearch': '',
+    '/TitleSearch': 'title',
+    '/PublisherSearch': 'publisher',
+    '/ISBNSearch': 'isbn',
+    '/AuthorSearch': 'author'
+  };
+  const type = Object.keys(types).find(key => query.startsWith(key));
+  return types[type] || '';
+}
+
+function getSearchTerm(query) {
+  console.log(query)
+  const index = query.indexOf(' ');
+  return index !== -1 ? query.slice(index + 1) : query;
+}
+
+bot.on('inline_query', async (ctx) => {
+  const query = ctx.inlineQuery.query;
+  if (query.length < 3) {
+    return ctx.answerInlineQuery([], {
+      switch_pm_text: 'Type at least 3 characters to search',
+      switch_pm_parameter: 'too_short'
+    })
+  }
+  const searchType = getSearchType(query);
+  const searchTerm = getSearchTerm(query);
+
+  const options = {
+    mirror: libgenUrl,
+    query: searchTerm,
+    count: count,
+    sort_by: "year",
+    search_in: searchType
+  };
+
+  try {
+    const data = await libgen.search(options);
+    // console.log(data)
+    const results = data.map((book, index) => ({
+      type: 'article',
+      id: String(index),
+      title: book.title,
+      description: `Author: ${book.author}, Year: ${book.year}`,
+      thumb_url: `${libgenCoverImageUrl}/${book.coverurl}`,
+      input_message_content: {
+        message_text: `Title: ${book.title}\nAuthor: ${book.author}\nYear: ${book.year}\nDownload: ${libgenUrl}/book/index.php?md5=${book.md5.toLowerCase()}`
+      },
+      reply_markup: {
+        inline_keyboard: [[
+          {
+            text: 'Download',
+            url: `${libgenUrl}/book/index.php?md5=${(book.md5 || '').toLowerCase()}`
+          }
+        ]]
+      }
+    }));
+    console.log(results)
+    return ctx.answerInlineQuery(results);
+  } catch (err) {
+    console.error(err);
+    return ctx.answerInlineQuery([], {
+      switch_pm_text: 'Error occurred. Try again',
+      switch_pm_parameter: 'error'
+    });
+  }
+})
+
 bot.command(
   [
     "GeneralSearch",
@@ -179,6 +249,7 @@ interface BookInterface {
   year: string;
   extension: "epub" | "mobi" | "azw3";
   md5: string;
+  coverurl: string,
 }
 const imagesDir = path.join(__dirname, "images");
 bot.on(message("photo"), async (ctx) => {
@@ -215,7 +286,13 @@ bot.on(message("photo"), async (ctx) => {
   // take in an image, ocr its title or whatever
   const image_data = fs.readFileSync(imagePath);
   const json_books = await get_image(image_data);
-  const booksObject = JSON.parse(json_books.content[0].text);
+  let booksObject = {}
+  try {
+    booksObject = JSON.parse(json_books.content[0].text);
+  } catch (e) {
+    await ctx.reply(json_books.content[0].text)
+  }
+  
   // console.log(booksObject);
   const titleOptions = {
     mirror: libgenUrl,
@@ -226,6 +303,7 @@ bot.on(message("photo"), async (ctx) => {
   };
   // console.log(titleOptions);
   let results = await libgen.search(titleOptions);
+  console.log(results)
   // download the top result with ^extension from libgen, return it in a message.
   if (results.length > 0) {
     results = results.map((book: BookInterface) => ({
@@ -234,6 +312,7 @@ bot.on(message("photo"), async (ctx) => {
       year: book.year,
       extension: book.extension,
       downloadLink: `${libgenUrl}/book/index.php?md5=${book.md5.toLowerCase()}`,
+      coverurl: `${libgenCoverImageUrl}/${book.coverurl}`
     }));
     // console.log(results);
     // generate a pagination list of books to download, filter to epub
@@ -252,8 +331,24 @@ bot.on(message("photo"), async (ctx) => {
         isSimpleArray: true, // optional. Default value: true. Enables/disables support for associative arrays
         titleKey: "", // optional. Default value: null. If the associative mode is enabled (isSimply: false), determines by which key the title for the button will be taken.
       },
-      onSelect: (item, index) => {
-        ctx.reply(`Download link for ${item.title}:\n${item.downloadLink}`);
+      onSelect: async (item, index) => {
+        console.log(`${item.coverurl}`)
+        await ctx.replyWithPhoto(
+          {
+            url: `${item.coverurl}`,
+          }
+        );
+        await ctx.reply(
+          `Title: ${item.title}\nAuthor: ${item.author}\nYear: ${item.year}`, {
+            reply_markup: {
+              inline_keyboard: [[
+                {
+                  text: 'Download',
+                  url: item.downloadLink
+                }
+              ]]
+            }}
+        )
       },
       messages: {
         // optional
