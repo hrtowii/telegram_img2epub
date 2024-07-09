@@ -131,6 +131,7 @@ export const searchScene = new WizardScene<any>(
         ],
       },
     });
+    return ctx.wizard.next();
     // TODO: create search functions for /GeneralSearch, /PublisherSearch, etc that take in a string argument, edit options, then call a shared function that returns search results.
     // Alternatively, use inline text to fetch for search results on the fly to show up as inline suggestions.  -> This will be harder but way cooler lol
   },
