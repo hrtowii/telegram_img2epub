@@ -1,15 +1,8 @@
-# whatsapp_img2epub
+# telegram_img2epub
 
-To install dependencies:
+## Telegram Bot that searches from Library Genesis for books.
 
-```bash
-bun install
-```
+### Takes in book covers (done with Claude Haiku API) and manual searching (WIP)
 
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.1.18. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+### How does it work?
+* Uses libgen npm package as a wrapper around libgen's api.

@@ -87,52 +87,56 @@ bot.help((ctx) =>
 
 export const searchScene = new WizardScene<any>(
   "searchScene",
+  // search for title
+  // search for publisher
+  // search for isbn
+  // search for author
+  // search for ^ + preferred extension
+  // search for book
+  // make the main one just search for book
   (ctx) => {
-    // search for title
-    // search for publisher
-    // search for isbn
-    // search for author
-    // search for ^ + preferred extension
-    // search for book
-    // make the main one just search for book
-    ctx.reply(
-      "Please select what you would like to search for.", // https://github.com/telegraf/telegraf/discussions/1450
-      Markup.inlineKeyboard([
-        Markup.button.callback("Everything!", "GeneralSearch"),
-        Markup.button.callback("Title", "TitleSearch"),
-        Markup.button.callback("Publisher", "PublisherSearch"),
-        Markup.button.callback("ISBN", "ISBNSearch"),
-        Markup.button.callback("Author", "AuthorSearch"),
-      ]),
-    );
-    return ctx.wizard.next();
-  },
-  (ctx) => {
-    if (!ctx.callbackQuery.data) {
-      ctx.reply("Please select an option.");
-      return;
-    }
-    console.log(ctx.callbackQuery.data);
-    ctx.reply("Please enter your search term.", {
+    ctx.reply("Please select what you would like to search for.", {
       reply_markup: {
         inline_keyboard: [
           [
-            { switch_inline_query_current_chat: `/${ctx.callbackQuery.data}` },
-            // TODO: create search functions for /GeneralSearch, /PublisherSearch, etc that take in a string argument, edit options, then call a shared function that returns search results.
-            // Alternatively, use inline text to fetch for search results on the fly to show up as inline suggestions.  -> This will be harder but way cooler lol
+            {
+              text: "Everything!",
+              switch_inline_query_current_chat: "/GeneralSearch",
+            },
+          ],
+          [
+            {
+              text: "Title",
+              switch_inline_query_current_chat: "/TitleSearch",
+            },
+          ],
+          [
+            {
+              text: "Publisher",
+              switch_inline_query_current_chat: "/PublisherSearch",
+            },
+          ],
+          [
+            {
+              text: "ISBN",
+              switch_inline_query_current_chat: "/ISBNSearch",
+            },
+          ],
+          [
+            {
+              text: "Author",
+              switch_inline_query_current_chat: "/AuthorSearch",
+            },
           ],
         ],
       },
     });
-    // return ctx.wizard.next();
-    // },
+    // TODO: create search functions for /GeneralSearch, /PublisherSearch, etc that take in a string argument, edit options, then call a shared function that returns search results.
+    // Alternatively, use inline text to fetch for search results on the fly to show up as inline suggestions.  -> This will be harder but way cooler lol
   },
 );
 
-bot.command(["search"], async (ctx) => {
-  await ctx.scene.enter("searchScene");
-});
-
+// This will be @botname /command. How do I do this? .command is only for /command...
 bot.command(
   [
     "GeneralSearch",
@@ -145,7 +149,7 @@ bot.command(
     const ourArgs = ctx.update.message.text.split(" ");
     const options = {
       mirror: libgenUrl,
-      query: ourArgs[0],
+      query: ourArgs.slice(1).join(" "),
       count: count,
       sort_by: "year",
     };
@@ -157,10 +161,9 @@ bot.command(
         console.log("");
         console.log("Title: " + data[n].title);
         console.log("Author: " + data[n].author);
-        const url = await libgen.utils.check.canDownload(data);
         console.log(
           "Download: " +
-            `http://${libgenUrl}/book/index.php?md5=` +
+            `${libgenUrl}/book/index.php?md5=` +
             data[n].md5.toLowerCase(),
         );
       }
@@ -184,10 +187,10 @@ bot.on(message("photo"), async (ctx) => {
     console.log("Image already exists, skipping download");
     const image_data = fs.readFileSync(imagePath);
     const json_books = await get_image(image_data);
-    console.log(json_books);
+    // console.log(json_books);
     return;
   }
-  console.log(`Downloading image ${imageId}`);
+  // console.log(`Downloading image ${imageId}`);
   // honestly I have no idea why the old version fails on macOS but works on windows.
   // hopefully this doesn't only work on macOS
   if (!fs.existsSync(imagesDir)) {
@@ -212,7 +215,7 @@ bot.on(message("photo"), async (ctx) => {
   const image_data = fs.readFileSync(imagePath);
   const json_books = await get_image(image_data);
   const booksObject = JSON.parse(json_books.content[0].text);
-  console.log(booksObject);
+  // console.log(booksObject);
   const titleOptions = {
     mirror: libgenUrl,
     query: booksObject.books[0].title,
@@ -220,7 +223,7 @@ bot.on(message("photo"), async (ctx) => {
     search_in: "title",
     sort_by: "year",
   };
-  console.log(titleOptions);
+  // console.log(titleOptions);
   let results = await libgen.search(titleOptions);
   // download the top result with ^extension from libgen, return it in a message.
   if (results.length > 0) {
@@ -231,7 +234,7 @@ bot.on(message("photo"), async (ctx) => {
       extension: book.extension,
       downloadLink: `${libgenUrl}/book/index.php?md5=${book.md5.toLowerCase()}`,
     }));
-    console.log(results);
+    // console.log(results);
     // generate a pagination list of books to download, filter to epub
     const pagination = new Pagination({
       data: results, // array of items
@@ -279,6 +282,9 @@ bot.command(["image"], async (ctx) => {
 const stage = new Scenes.Stage<any>([searchScene]);
 bot.use(session()); // https://github.com/telegraf/telegraf/issues/1171#issuecomment-1363134768
 bot.use(stage.middleware());
+bot.command(["search"], (ctx) => {
+  ctx.scene.enter("searchScene");
+});
 // const worker = await createWorker("eng");
 bot.launch();
 console.log("running!");
