@@ -11,30 +11,35 @@ import https from "https";
 import Anthropic from "@anthropic-ai/sdk";
 const anthropic = new Anthropic();
 
-const msg = await anthropic.messages.create({
-  model: "claude-3-haiku-20240307",
-  max_tokens: 100,
-  messages: [
-    {
-      role: "user",
-      content: [
-        {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: "image/jpeg",
-            data: "/9j/4AAQSkZJRg...",
+async function get_image(image_data: Buffer) {
+  const base64_data = Buffer.from(image_data).toString("base64");
+  const msg = await anthropic.messages.create({
+    model: "claude-3-haiku-20240307",
+    max_tokens: 600,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: "image/jpeg",
+              data: base64_data,
+            },
           },
-        },
-        {
-          type: "text",
-          text: "Given the image I have attached, return a JSON only of all the books in the image. Follow the given format: {'books: {'title': 'book_title', 'author': 'book_author'}}",
-        },
-      ],
-    },
-  ],
-});
-console.log(msg);
+          {
+            type: "text",
+            text: 'Given the image I have attached, return a JSON only of all the books in the image. Follow the given format: {"books": [{"title": "book_title_1", "author": "book_author_1"}, {"title": "book_title_2", "author": "book_author_2"}]} If there are missing fields, add an empty string.',
+          },
+        ],
+      },
+    ],
+  });
+  console.log(msg);
+  return msg;
+}
+
 // good comment describing how to use scenes https://github.com/telegraf/telegraf/issues/705#issuecomment-549056045
 bot.telegram.setMyCommands([
   {
@@ -68,17 +73,6 @@ if (process.env.TOKEN === "") {
 const libgenUrl = "http://libgen.is";
 const count = 10;
 const defaultExtension = "epub";
-// bot.command('test', async (ctx) => {
-//     return await ctx.reply('this is text', Markup
-//       .keyboard([
-//         ['button 1', 'button 2'], // Row1 with 2 buttons
-//         ['button 3', 'button 4'], // Row2 with 2 buttons
-//         ['button 5', 'button 6', 'button 7'] // Row3 with 3 buttons
-//       ])
-//       .oneTime()
-//       .resize()
-//     )
-// })
 
 bot.start((ctx) =>
   ctx.reply(
@@ -130,12 +124,28 @@ export const searchScene = new WizardScene<any>(
         ],
       },
     });
-    return ctx.wizard.next();
+    // return ctx.wizard.next();
+    // },
   },
+);
+
+bot.command(["search"], async (ctx) => {
+  await ctx.scene.enter("searchScene");
+});
+
+bot.command(
+  [
+    "GeneralSearch",
+    "TitleSearch",
+    "PublisherSearch",
+    "ISBNSearch",
+    "AuthorSearch",
+  ],
   async (ctx) => {
+    const ourArgs = ctx.update.message.text.split(" ");
     const options = {
       mirror: libgenUrl,
-      query: "cats",
+      query: ourArgs[0],
       count: count,
       sort_by: "year",
     };
@@ -159,23 +169,31 @@ export const searchScene = new WizardScene<any>(
     }
   },
 );
-
-bot.command(["search"], async (ctx) => {
-  await ctx.scene.enter("searchScene");
-});
-
+interface BookInterface {
+  title: string;
+  author: string;
+  year: string;
+  extension: "epub" | "mobi" | "azw3";
+  md5: string;
+}
+const imagesDir = path.join(__dirname, "images");
 bot.on(message("photo"), async (ctx) => {
-  // https://stackoverflow.com/a/77073874
   const imageId = ctx.message.photo.pop()!!.file_id || "Bruh";
-  const link = await ctx.telegram.getFileLink(imageId);
+  const imagePath = path.join(imagesDir, `${imageId}.jpeg`);
+  if (fs.existsSync(imagePath) === true) {
+    console.log("Image already exists, skipping download");
+    const image_data = fs.readFileSync(imagePath);
+    const json_books = await get_image(image_data);
+    console.log(json_books);
+    return;
+  }
   console.log(`Downloading image ${imageId}`);
   // honestly I have no idea why the old version fails on macOS but works on windows.
   // hopefully this doesn't only work on macOS
-  const imagesDir = path.join(__dirname, "images");
   if (!fs.existsSync(imagesDir)) {
     fs.mkdirSync(imagesDir, { recursive: true });
   }
-  const imagePath = path.join(imagesDir, `${imageId}.jpeg`);
+  const link = await ctx.telegram.getFileLink(imageId);
   await new Promise<void>((resolve, reject) => {
     https
       .get(link.toString(), (response) => {
@@ -191,11 +209,67 @@ bot.on(message("photo"), async (ctx) => {
       .on("error", reject);
   });
   // take in an image, ocr its title or whatever
-  // ocr with Tesseract
-  // const ret = await worker.recognize(`images/${imageId}.jpeg`);
-  // ok tesseract sucks. lets just use gemini or something
-  console.log(ret.data.text);
+  const image_data = fs.readFileSync(imagePath);
+  const json_books = await get_image(image_data);
+  const booksObject = JSON.parse(json_books.content[0].text);
+  console.log(booksObject);
+  const titleOptions = {
+    mirror: libgenUrl,
+    query: booksObject.books[0].title,
+    count: 10,
+    search_in: "title",
+    sort_by: "year",
+  };
+  console.log(titleOptions);
+  let results = await libgen.search(titleOptions);
   // download the top result with ^extension from libgen, return it in a message.
+  if (results.length > 0) {
+    results = results.map((book: BookInterface) => ({
+      title: book.title,
+      author: book.author,
+      year: book.year,
+      extension: book.extension,
+      downloadLink: `${libgenUrl}/book/index.php?md5=${book.md5.toLowerCase()}`,
+    }));
+    console.log(results);
+    // generate a pagination list of books to download, filter to epub
+    const pagination = new Pagination({
+      data: results, // array of items
+      header: (currentPage, pageSize, total) =>
+        `${currentPage} page of total ${total}`, // optional. Default value: 👇
+      // `Items ${(currentPage - 1) * pageSize + 1 }-${currentPage * pageSize <= total ? currentPage * pageSize : total} of ${total}`;
+      format: (item, index) => `${index + 1}. ${item.title}`, // optional. Default value: 👇
+      // `${index + 1}. ${item}`;
+      pageSize: 8, // optional. Default value: 10
+      rowSize: 4, // optional. Default value: 5 (maximum 8)
+      isButtonsMode: false, // optional. Default value: false. Allows you to display names on buttons (there is support for associative arrays)
+      isEnabledDeleteButton: false,
+      buttonModeOptions: {
+        isSimpleArray: true, // optional. Default value: true. Enables/disables support for associative arrays
+        titleKey: "", // optional. Default value: null. If the associative mode is enabled (isSimply: false), determines by which key the title for the button will be taken.
+      },
+      onSelect: (item, index) => {
+        ctx.reply(`Download link for ${item.title}:\n${item.downloadLink}`);
+      },
+      messages: {
+        // optional
+        firstPage: "First page", // optional. Default value: "❗️ That's the first page"
+        lastPage: "Last page", // optional. Default value: "❗️ That's the last page"
+        prev: "◀️", // optional. Default value: "⬅️"
+        next: "▶️", // optional. Default value: "➡️"
+      },
+    });
+
+    pagination.handleActions(bot); // pass bot or scene instance as a parameter
+
+    const text = await pagination.text(); // get pagination text
+    const keyboard = await pagination.keyboard(); // get pagination keyboard
+    console.log(text, keyboard);
+    ctx.replyWithHTML(text, keyboard);
+  } else {
+    await ctx.reply("No books are found!");
+    return;
+  }
 });
 
 bot.command(["image"], async (ctx) => {
