@@ -71,7 +71,7 @@ if (process.env.TOKEN === "") {
 }
 
 const libgenUrl = "http://libgen.is";
-const libgenCoverImageUrl = `${libgenUrl}/covers`
+const libgenCoverImageUrl = `${libgenUrl}/covers`;
 const count = 10;
 const defaultExtension = "epub";
 
@@ -141,29 +141,29 @@ export const searchScene = new WizardScene<any>(
 // This will be @botname /command. How do I do this? .command is only for /command...
 function getSearchType(query) {
   const types = {
-    '/GeneralSearch': '',
-    '/TitleSearch': 'title',
-    '/PublisherSearch': 'publisher',
-    '/ISBNSearch': 'isbn',
-    '/AuthorSearch': 'author'
+    "/GeneralSearch": "",
+    "/TitleSearch": "title",
+    "/PublisherSearch": "publisher",
+    "/ISBNSearch": "isbn",
+    "/AuthorSearch": "author",
   };
-  const type = Object.keys(types).find(key => query.startsWith(key));
-  return types[type] || '';
+  const type = Object.keys(types).find((key) => query.startsWith(key));
+  return types[type] || "";
 }
 
 function getSearchTerm(query) {
-  console.log(query)
-  const index = query.indexOf(' ');
+  console.log(query);
+  const index = query.indexOf(" ");
   return index !== -1 ? query.slice(index + 1) : query;
 }
 
-bot.on('inline_query', async (ctx) => {
+bot.on("inline_query", async (ctx) => {
   const query = ctx.inlineQuery.query;
   if (query.length < 3) {
     return ctx.answerInlineQuery([], {
-      switch_pm_text: 'Type at least 3 characters to search',
-      switch_pm_parameter: 'too_short'
-    })
+      switch_pm_text: "Type at least 3 characters to search",
+      switch_pm_parameter: "too_short",
+    });
   }
   const searchType = getSearchType(query);
   const searchTerm = getSearchTerm(query);
@@ -173,40 +173,47 @@ bot.on('inline_query', async (ctx) => {
     query: searchTerm,
     count: count,
     sort_by: "year",
-    search_in: searchType
+    search_in: searchType,
   };
 
   try {
     const data = await libgen.search(options);
     // console.log(data)
     const results = data.map((book, index) => ({
-      type: 'article',
+      type: "article",
       id: String(index),
       title: book.title,
       description: `Author: ${book.author}, Year: ${book.year}`,
       thumb_url: `${libgenCoverImageUrl}/${book.coverurl}`,
+      // input_message_content: {
+      //   message_text: `Title: ${book.title}\nAuthor: ${book.author}\nYear: ${book.year}\nDownload: ${libgenUrl}/book/index.php?md5=${book.md5.toLowerCase()}`,
+      // },
       input_message_content: {
-        message_text: `Title: ${book.title}\nAuthor: ${book.author}\nYear: ${book.year}\nDownload: ${libgenUrl}/book/index.php?md5=${book.md5.toLowerCase()}`
+        message_text: `<a href="${libgenCoverImageUrl}/${book.coverurl}">&#8205;</a>Title: ${book.title}\nAuthor: ${book.author}\nYear: ${book.year}\nDownload: ${libgenUrl}/book/index.php?md5=${book.md5.toLowerCase()}`,
+        parse_mode: "HTML",
+        disable_web_page_preview: false,
       },
       reply_markup: {
-        inline_keyboard: [[
-          {
-            text: 'Download',
-            url: `${libgenUrl}/book/index.php?md5=${(book.md5 || '').toLowerCase()}`
-          }
-        ]]
-      }
+        inline_keyboard: [
+          [
+            {
+              text: "Download",
+              url: `${libgenUrl}/book/index.php?md5=${(book.md5 || "").toLowerCase()}`,
+            },
+          ],
+        ],
+      },
     }));
-    console.log(results)
+    // console.log(results)
     return ctx.answerInlineQuery(results);
   } catch (err) {
     console.error(err);
     return ctx.answerInlineQuery([], {
-      switch_pm_text: 'Error occurred. Try again',
-      switch_pm_parameter: 'error'
+      switch_pm_text: "Error occurred. Try again",
+      switch_pm_parameter: "error",
     });
   }
-})
+});
 
 bot.command(
   [
@@ -249,7 +256,7 @@ interface BookInterface {
   year: string;
   extension: "epub" | "mobi" | "azw3";
   md5: string;
-  coverurl: string,
+  coverurl: string;
 }
 const imagesDir = path.join(__dirname, "images");
 bot.on(message("photo"), async (ctx) => {
@@ -286,13 +293,14 @@ bot.on(message("photo"), async (ctx) => {
   // take in an image, ocr its title or whatever
   const image_data = fs.readFileSync(imagePath);
   const json_books = await get_image(image_data);
-  let booksObject = {}
+  let booksObject = {};
   try {
     booksObject = JSON.parse(json_books.content[0].text);
   } catch (e) {
-    await ctx.reply(json_books.content[0].text)
+    await ctx.reply(json_books.content[0].text);
+    return;
   }
-  
+
   // console.log(booksObject);
   const titleOptions = {
     mirror: libgenUrl,
@@ -303,7 +311,7 @@ bot.on(message("photo"), async (ctx) => {
   };
   // console.log(titleOptions);
   let results = await libgen.search(titleOptions);
-  console.log(results)
+  console.log(results);
   // download the top result with ^extension from libgen, return it in a message.
   if (results.length > 0) {
     results = results.map((book: BookInterface) => ({
@@ -312,7 +320,7 @@ bot.on(message("photo"), async (ctx) => {
       year: book.year,
       extension: book.extension,
       downloadLink: `${libgenUrl}/book/index.php?md5=${book.md5.toLowerCase()}`,
-      coverurl: `${libgenCoverImageUrl}/${book.coverurl}`
+      coverurl: `${libgenCoverImageUrl}/${book.coverurl}`,
     }));
     // console.log(results);
     // generate a pagination list of books to download, filter to epub
@@ -332,23 +340,24 @@ bot.on(message("photo"), async (ctx) => {
         titleKey: "", // optional. Default value: null. If the associative mode is enabled (isSimply: false), determines by which key the title for the button will be taken.
       },
       onSelect: async (item, index) => {
-        console.log(`${item.coverurl}`)
-        await ctx.replyWithPhoto(
-          {
-            url: `${item.coverurl}`,
-          }
-        );
+        await ctx.replyWithPhoto({
+          url: `${item.coverurl}`,
+        });
         await ctx.reply(
-          `Title: ${item.title}\nAuthor: ${item.author}\nYear: ${item.year}`, {
+          `Title: <strong>${item.title}</strong>\nAuthor: ${item.author}\nYear: ${item.year}`,
+          {
             reply_markup: {
-              inline_keyboard: [[
-                {
-                  text: 'Download',
-                  url: item.downloadLink
-                }
-              ]]
-            }}
-        )
+              inline_keyboard: [
+                [
+                  {
+                    text: "Download",
+                    url: item.downloadLink,
+                  },
+                ],
+              ],
+            },
+          },
+        );
       },
       messages: {
         // optional
